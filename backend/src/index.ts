@@ -7,6 +7,7 @@ import {basePrompt as reactBasePrompt} from "./defaults/react";
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 require("dotenv").config()
 
+
 const genAI = new GoogleGenerativeAI(process.env.API_KEY);
 const app = express()
 
