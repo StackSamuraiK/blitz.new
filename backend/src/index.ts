@@ -17,7 +17,7 @@ app.use(cors())
 //@ts-ignore
 app.post("/template", async (req: Request, res: Response) => {
     try {
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
   
       const prompt = req.body.prompt || "I need a React template"; // Example fallback
       console.log("Prompt:", prompt);
