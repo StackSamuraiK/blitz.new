@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { StepsList } from '../components/StepsList';
 import { FileExplorer } from '../components/FileExplorer';
 import { TabView } from '../components/TabView';
@@ -11,24 +11,17 @@ import { BACKEND_URL } from '../config';
 import { parseXml } from '../steps';
 import { useWebContainer } from '../hooks/useWebContainer';
 import { Loader } from '../components/Loader';
-import { Wand2, Send, Sparkles, Code2, Eye, FolderOpen, Layers3, Bot, User, Zap } from 'lucide-react';
-
-const MOCK_FILE_CONTENT = `// This is a sample file content
-import React from 'react';
-
-function Component() {
-  return <div>Hello World</div>;
-}
-
-export default Component;`;
+import { Wand2, Send, Sparkles, Code2, Eye, FolderOpen, Layers3, Bot, User, Zap, AlertCircle } from 'lucide-react';
 
 export function Builder() {
   const location = useLocation();
-  const { prompt } = location.state as { prompt: string };
+  const navigate = useNavigate();
+  const { prompt } = (location.state as { prompt: string }) || { prompt: '' };
   const [userPrompt, setPrompt] = useState("");
   const [llmMessages, setLlmMessages] = useState<{role: "user" | "assistant", content: string;}[]>([]);
   const [loading, setLoading] = useState(false);
   const [templateSet, setTemplateSet] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const webcontainer = useWebContainer();
 
   const [currentStep, setCurrentStep] = useState(1);
@@ -36,17 +29,18 @@ export function Builder() {
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
   
   const [steps, setSteps] = useState<Step[]>([]);
-
   const [files, setFiles] = useState<FileItem[]>([]);
 
+  // Update files when steps change
   useEffect(() => {
     let originalFiles = [...files];
     let updateHappened = false;
+    
     steps.filter(({status}) => status === "pending").map(step => {
       updateHappened = true;
       if (step?.type === StepType.CreateFile) {
-        let parsedPath = step.path?.split("/") ?? []; // ["src", "components", "App.tsx"]
-        let currentFileStructure = [...originalFiles]; // {}
+        let parsedPath = step.path?.split("/") ?? [];
+        let currentFileStructure = [...originalFiles];
         let finalAnswerRef = currentFileStructure;
   
         let currentFolder = ""
@@ -69,7 +63,7 @@ export function Builder() {
               file.content = step.code;
             }
           } else {
-            /// in a folder
+            // in a folder
             let folder = currentFileStructure.find(x => x.path === currentFolder)
             if (!folder) {
               // create the folder
@@ -86,30 +80,27 @@ export function Builder() {
         }
         originalFiles = finalAnswerRef;
       }
-
     })
 
     if (updateHappened) {
-
+      console.log('Updating files from steps...');
       setFiles(originalFiles)
       setSteps(steps => steps.map((s: Step) => {
         return {
           ...s,
           status: "completed"
         }
-        
       }))
     }
-    console.log(files);
   }, [steps, files]);
 
+  // Mount files to WebContainer
   useEffect(() => {
     const createMountStructure = (files: FileItem[]): Record<string, any> => {
       const mountStructure: Record<string, any> = {};
   
       const processFile = (file: FileItem, isRootFolder: boolean) => {  
         if (file.type === 'folder') {
-          // For folders, create a directory entry
           mountStructure[file.name] = {
             directory: file.children ? 
               Object.fromEntries(
@@ -125,7 +116,6 @@ export function Builder() {
               }
             };
           } else {
-            // For files, create a file entry with contents
             return {
               file: {
                 contents: file.content || ''
@@ -137,58 +127,236 @@ export function Builder() {
         return mountStructure[file.name];
       };
   
-      // Process each top-level file/folder
       files.forEach(file => processFile(file, true));
-  
       return mountStructure;
     };
   
     const mountStructure = createMountStructure(files);
-  
-    // Mount the structure if WebContainer is available
-    console.log(mountStructure);
+    console.log('Mounting to WebContainer:', mountStructure);
     webcontainer?.mount(mountStructure);
   }, [files, webcontainer]);
 
   async function init() {
-    const response = await axios.post(`${BACKEND_URL}/template`, {
-      prompt: prompt.trim()
-    });
-    setTemplateSet(true);
-    
-    const {prompts, uiPrompts} = response.data;
+    if (!prompt || !prompt.trim()) {
+      setError('No prompt provided. Please go back and enter a prompt.');
+      setLoading(false);
+      return;
+    }
 
-    setSteps(parseXml(uiPrompts[0]).map((x: Step) => ({
-      ...x,
-      status: "pending"
-    })));
+    try {
+      setError(null);
+      setLoading(true);
 
-    setLoading(true);
-    const stepsResponse = await axios.post(`${BACKEND_URL}/chat`, {
-      messages: [...prompts, prompt].map(content => ({
+      console.log('=== INIT START ===');
+      console.log('BACKEND_URL:', BACKEND_URL);
+      console.log('Prompt:', prompt.trim());
+      
+      // Step 1: Get template
+      console.log('Step 1: Getting template...');
+      const response = await axios.post(`${BACKEND_URL}/template`, {
+        prompt: prompt.trim()
+      });
+
+      console.log('Template response:', response.data);
+      
+      if (!response.data.prompts || !response.data.uiPrompts) {
+        throw new Error('Invalid template response format');
+      }
+
+      setTemplateSet(true);
+      
+      const {prompts, uiPrompts} = response.data;
+
+      // Step 2: Parse initial UI prompts
+      console.log('Step 2: Parsing UI prompts...');
+      console.log('UI Prompt:', uiPrompts[0]);
+      const initialSteps = parseXml(uiPrompts[0]);
+      console.log('Parsed initial steps:', initialSteps.length, 'steps');
+
+      setSteps(initialSteps.map((x: Step) => ({
+        ...x,
+        status: "pending"
+      })));
+
+      // Step 3: Get AI response
+      console.log('Step 3: Generating code with AI...');
+      const chatMessages = [...prompts, prompt].map(content => ({
         role: "user",
         content
-      }))
-    })
+      }));
 
-    setLoading(false);
+      console.log('Sending', chatMessages.length, 'messages to /chat');
 
-    setSteps(s => [...s, ...parseXml(stepsResponse.data.response).map(x => ({
-      ...x,
-      status: "pending" as "pending"
-    }))]);
+      const stepsResponse = await axios.post(`${BACKEND_URL}/chat`, {
+        messages: chatMessages
+      });
 
-    setLlmMessages([...prompts, prompt].map(content => ({
-      role: "user",
-      content
-    })));
+      console.log('=== AI RESPONSE RECEIVED ===');
+      console.log('Response type:', typeof stepsResponse.data.response);
+      console.log('Response length:', stepsResponse.data.response?.length);
+      console.log('First 500 chars:', stepsResponse.data.response?.substring(0, 500));
+      console.log('Contains boltArtifact:', stepsResponse.data.response?.includes('boltArtifact'));
+      console.log('Contains boltAction:', stepsResponse.data.response?.includes('boltAction'));
 
-    setLlmMessages(x => [...x, {role: "assistant", content: stepsResponse.data.response}])
+      if (!stepsResponse.data.response) {
+        throw new Error('AI response is empty or undefined');
+      }
+
+      // Step 4: Parse AI response
+      console.log('Step 4: Parsing AI response...');
+      const aiSteps = parseXml(stepsResponse.data.response);
+      console.log('Parsed AI steps:', aiSteps.length, 'steps');
+
+      if (aiSteps.length === 0) {
+        console.warn('⚠️ WARNING: parseXml returned 0 steps!');
+        console.log('Raw AI response:', stepsResponse.data.response);
+        setError('AI generated a response but no files were created. The response format may be incorrect. Please try again with a different prompt.');
+        return;
+      }
+
+      // Log first step for debugging
+      if (aiSteps.length > 0) {
+        console.log('First AI step sample:', {
+          title: aiSteps[0].title,
+          path: aiSteps[0].path,
+          codeLength: aiSteps[0].code?.length
+        });
+      }
+
+      setSteps(s => {
+        const newSteps = [...s, ...aiSteps.map(x => ({
+          ...x,
+          status: "pending" as "pending"
+        }))];
+        console.log('Total steps now:', newSteps.length);
+        return newSteps;
+      });
+
+      //@ts-ignore
+      setLlmMessages(chatMessages);
+      setLlmMessages(x => [...x, {
+        role: "assistant",
+        content: stepsResponse.data.response
+      }]);
+
+      console.log('=== INIT COMPLETE ===');
+      
+    } catch (err) {
+      console.error('=== ERROR IN INIT ===');
+      console.error('Error:', err);
+      
+      if (axios.isAxiosError(err)) {
+        const errorMessage = err.response?.data?.error || err.message || 'Failed to initialize builder';
+        console.error('Axios error details:', {
+          status: err.response?.status,
+          statusText: err.response?.statusText,
+          data: err.response?.data,
+          message: err.message,
+          url: err.config?.url
+        });
+        setError(`Error: ${errorMessage}\n\nCheck the browser console for more details.`);
+      } else {
+        setError('An unexpected error occurred: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      }
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
     init();
-  }, [])
+  }, []);
+
+  // Handle sending new messages
+  async function handleSendMessage() {
+    if (!userPrompt.trim()) return;
+
+    const newMessage = {
+      role: "user" as "user",
+      content: userPrompt
+    };
+
+    try {
+      setLoading(true);
+      console.log('Sending new message to AI...');
+      
+      const stepsResponse = await axios.post(`${BACKEND_URL}/chat`, {
+        messages: [...llmMessages, newMessage]
+      });
+
+      console.log('New AI response received, length:', stepsResponse.data.response?.length);
+
+      if (!stepsResponse.data.response) {
+        throw new Error('Empty response from AI');
+      }
+      
+      const newSteps = parseXml(stepsResponse.data.response);
+      console.log('Parsed', newSteps.length, 'new steps');
+
+      setLlmMessages(x => [...x, newMessage]);
+      setLlmMessages(x => [...x, {
+        role: "assistant",
+        content: stepsResponse.data.response
+      }]);
+      
+      setSteps(s => [...s, ...newSteps.map(x => ({
+        ...x,
+        status: "pending" as "pending"
+      }))]);
+
+      setPrompt("");
+    } catch (err) {
+      console.error('Error sending message:', err);
+      if (axios.isAxiosError(err)) {
+        alert(`Error: ${err.response?.data?.error || err.message}`);
+      } else {
+        alert('An unexpected error occurred');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Error state display
+  if (error) {
+    return (
+      <div className="min-h-screen bg-black relative overflow-hidden flex items-center justify-center">
+        <div className="absolute inset-0 bg-gradient-to-br from-gray-900/10 via-black to-red-900/10"></div>
+        <div className="absolute top-0 left-1/3 w-96 h-96 bg-red-500/5 rounded-full blur-3xl animate-pulse"></div>
+        
+        <div className="relative z-10 max-w-2xl w-full mx-4">
+          <div className="bg-red-900/20 backdrop-blur-xl border border-red-500/50 rounded-2xl p-8 shadow-2xl">
+            <div className="flex items-center space-x-3 mb-4">
+              <AlertCircle className="w-8 h-8 text-red-400" />
+              <h2 className="text-red-400 text-2xl font-bold">Error</h2>
+            </div>
+            <div className="bg-black/30 rounded-lg p-4 mb-6">
+              <pre className="text-gray-300 text-sm whitespace-pre-wrap font-mono leading-relaxed">
+                {error}
+              </pre>
+            </div>
+            <div className="flex space-x-4">
+              <button 
+                onClick={() => navigate('/')}
+                className="flex-1 bg-gradient-to-r from-red-600 to-red-700 text-white px-6 py-3 rounded-xl hover:from-red-700 hover:to-red-800 transition-all duration-300 font-medium flex items-center justify-center space-x-2"
+              >
+                <span>Go Back Home</span>
+              </button>
+              <button 
+                onClick={() => {
+                  setError(null);
+                  init();
+                }}
+                className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 font-medium flex items-center justify-center space-x-2"
+              >
+                <span>Retry</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-black relative overflow-hidden">
@@ -221,8 +389,10 @@ export function Builder() {
           
           <div className="flex items-center space-x-3">
             <div className="flex items-center space-x-2 bg-gray-800/50 backdrop-blur-sm rounded-full px-4 py-2 border border-gray-700/50">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              <span className="text-green-400 text-sm font-medium">Building</span>
+              <div className={`w-2 h-2 rounded-full animate-pulse ${loading ? 'bg-yellow-500' : 'bg-green-500'}`}></div>
+              <span className={`text-sm font-medium ${loading ? 'text-yellow-400' : 'text-green-400'}`}>
+                {loading ? 'Building...' : 'Ready'}
+              </span>
             </div>
           </div>
         </div>
@@ -244,7 +414,6 @@ export function Builder() {
           {/* Steps Panel */}
           <div className="col-span-3 space-y-6 overflow-auto">
             <div className="bg-gray-900/80 backdrop-blur-xl rounded-2xl border border-gray-800/50 shadow-2xl overflow-hidden">
-              {/* Steps Header */}
               <div className="bg-gradient-to-r from-blue-600/10 to-purple-600/10 px-6 py-4 border-b border-gray-800/50">
                 <div className="flex items-center space-x-3">
                   <Layers3 className="w-5 h-5 text-blue-400" />
@@ -256,11 +425,26 @@ export function Builder() {
               </div>
               
               <div className="max-h-[60vh] overflow-auto p-4">
-                <StepsList
-                  steps={steps}
-                  currentStep={currentStep}
-                  onStepClick={setCurrentStep}
-                />
+                {steps.length === 0 && loading && (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="flex items-center space-x-3">
+                      <Loader />
+                      <span className="text-gray-400 text-sm">Loading steps...</span>
+                    </div>
+                  </div>
+                )}
+                {steps.length === 0 && !loading && (
+                  <div className="text-center py-8">
+                    <p className="text-gray-400 text-sm">No steps yet</p>
+                  </div>
+                )}
+                {steps.length > 0 && (
+                  <StepsList
+                    steps={steps}
+                    currentStep={currentStep}
+                    onStepClick={setCurrentStep}
+                  />
+                )}
               </div>
             </div>
 
@@ -287,33 +471,16 @@ export function Builder() {
                     <textarea 
                       value={userPrompt} 
                       onChange={(e) => setPrompt(e.target.value)}
-                      placeholder="Ask me to modify the website, add features, or fix issues..."
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && e.ctrlKey) {
+                          handleSendMessage();
+                        }
+                      }}
+                      placeholder="Ask me to modify the website, add features, or fix issues... (Ctrl+Enter to send)"
                       className="w-full h-24 p-4 bg-gray-800/50 text-gray-100 border border-gray-700/50 rounded-xl focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 resize-none placeholder-gray-500 backdrop-blur-sm transition-all duration-300"
                     />
                     <button 
-                      onClick={async () => {
-                        const newMessage = {
-                          role: "user" as "user",
-                          content: userPrompt
-                        };
-
-                        setLoading(true);
-                        const stepsResponse = await axios.post(`${BACKEND_URL}/chat`, {
-                          messages: [...llmMessages, newMessage]
-                        });
-                        setLoading(false);
-
-                        setLlmMessages(x => [...x, newMessage]);
-                        setLlmMessages(x => [...x, {
-                          role: "assistant",
-                          content: stepsResponse.data.response
-                        }]);
-                        
-                        setSteps(s => [...s, ...parseXml(stepsResponse.data.response).map(x => ({
-                          ...x,
-                          status: "pending" as "pending"
-                        }))]);
-                      }}
+                      onClick={handleSendMessage}
                       disabled={!userPrompt.trim() || loading}
                       className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white py-3 px-6 rounded-xl font-medium hover:from-purple-700 hover:to-pink-700 transition-all duration-300 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg hover:shadow-purple-500/25"
                     >
@@ -341,10 +508,26 @@ export function Builder() {
               </div>
               
               <div className="p-4 overflow-auto h-[calc(100%-4rem)]">
-                <FileExplorer 
-                  files={files} 
-                  onFileSelect={setSelectedFile}
-                />
+                {files.length === 0 && loading && (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="flex items-center space-x-3">
+                      <Loader />
+                      <span className="text-gray-400 text-sm">Generating files...</span>
+                    </div>
+                  </div>
+                )}
+                {files.length === 0 && !loading && (
+                  <div className="text-center py-8">
+                    <FolderOpen className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+                    <p className="text-gray-400 text-sm">No files yet</p>
+                  </div>
+                )}
+                {files.length > 0 && (
+                  <FileExplorer 
+                    files={files} 
+                    onFileSelect={setSelectedFile}
+                  />
+                )}
               </div>
             </div>
           </div>
@@ -352,7 +535,6 @@ export function Builder() {
           {/* Code Editor & Preview */}
           <div className="col-span-6">
             <div className="bg-gray-900/80 backdrop-blur-xl rounded-2xl border border-gray-800/50 shadow-2xl overflow-hidden h-[calc(100vh-8rem)]">
-              {/* Enhanced Tab View */}
               <div className="bg-gray-800/50 px-6 py-4 border-b border-gray-700/50">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-1 bg-gray-700/30 rounded-lg p-1">
@@ -389,7 +571,6 @@ export function Builder() {
                 </div>
               </div>
 
-              {/* Content Area */}
               <div className="h-[calc(100%-5rem)] bg-black/20">
                 {activeTab === 'code' ? (
                   <div className="h-full relative">

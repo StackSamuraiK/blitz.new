@@ -1,1 +1,1 @@
-export const BACKEND_URL = "https://lumeai.onrender.com"
+export const BACKEND_URL = "http://localhost:3000"

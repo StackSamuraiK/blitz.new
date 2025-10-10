@@ -12,7 +12,7 @@ export function Home() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (prompt.trim()) {
-      navigate('/builder', { state: { prompt } });
+      navigate('/builder', { state: { prompt: prompt.trim() } });
     }
   };
 
@@ -98,7 +98,7 @@ export function Home() {
           </div>
         </div>
 
-        <div onSubmit={handleSubmit} className="space-y-8">
+        <form onSubmit={handleSubmit} className="space-y-8">
           <div className="relative group">
             {/* Enhanced glowing border effect */}
             <div className={`absolute -inset-1 bg-gradient-to-r from-blue-600/30 via-purple-600/30 to-pink-600/30 rounded-3xl blur opacity-0 group-hover:opacity-100 transition-all duration-500 ${isFocused ? 'opacity-100' : ''}`}></div>
@@ -113,12 +113,13 @@ export function Home() {
                   onBlur={() => setIsFocused(false)}
                   placeholder="✨ Describe your dream website...
 
-At the end of the prompt add the word REACT so that LLM could Understand its a webpage if you want to build your backend add NODE at the end
+💡 TIP: Add 'REACT' at the end for frontend projects, or 'NODE' for backend APIs!
 
 Examples:
-• A modern portfolio site for a photographer with dark theme and smooth animations
-• An e-commerce store for handmade jewelry with payment integration
-• A landing page for a SaaS product with pricing tiers and testimonials"
+• A modern portfolio site with dark theme and smooth animations REACT
+• An e-commerce store for handmade jewelry with gallery REACT
+• A REST API for a blog with authentication NODE
+• A landing page for a SaaS product with pricing tiers REACT"
                   className="w-full h-48 p-6 bg-black/60 text-gray-100 border border-gray-800/50 rounded-2xl focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 resize-none placeholder-gray-500 text-lg leading-relaxed backdrop-blur-sm transition-all duration-500 focus:bg-black/80 focus:shadow-2xl"
                 />
 
@@ -133,8 +134,7 @@ Examples:
 
               {/* Enhanced submit button */}
               <button
-                type="button"
-                onClick={handleSubmit}
+                type="submit"
                 onMouseEnter={() => setIsHovered(true)}
                 onMouseLeave={() => setIsHovered(false)}
                 disabled={!prompt.trim()}
@@ -146,7 +146,7 @@ Examples:
                 {/* Button content */}
                 <div className="relative flex items-center justify-center space-x-4">
                   <Zap className="w-6 h-6" />
-                  <span className="text-xl">Generate Website Plan</span>
+                  <span className="text-xl">Generate Website</span>
                   <ArrowRight
                     className={`w-6 h-6 transition-all duration-300 ${isHovered ? 'translate-x-2 rotate-12' : ''
                       }`}
@@ -158,7 +158,7 @@ Examples:
               </button>
             </div>
           </div>
-        </div>
+        </form>
 
         {/* Enhanced bottom section */}
         <div className="mt-16 text-center">
