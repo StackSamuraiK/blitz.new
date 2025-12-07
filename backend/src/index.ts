@@ -175,7 +175,7 @@ app.post("/chat", async (req: Request, res: Response) => {
     console.log("Processing chat request with", messages.length, "messages");
 
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash-exp",
+      model: "gemini-2.5-flash-exp",
       systemInstruction: getSystemPrompt()
     });
 
