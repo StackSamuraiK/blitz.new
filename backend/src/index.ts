@@ -17,7 +17,12 @@ if (!process.env.GEMINI_API_KEY) {
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: ['https://blitz.horizonlab.in', 'http://localhost:5173' , 'https://blitz-new.vercel.app'],
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -215,9 +220,10 @@ app.post("/chat", async (req: Request, res: Response) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+app.listen(Number(PORT), '0.0.0.0', () => {
   console.log(`✅ Server running on port ${PORT}`);
+  console.log(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
   //@ts-ignore
-  console.log(`✅ Gemini API Key loaded: ${process.env.GEMINI_API_KEY.substring(0, 10)}...`);
+  console.log(`✅ Gemini API Key loaded: ${process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.substring(0, 10) + "..." : "MISSING"}`);
   console.log(`Health check: http://localhost:${PORT}/health`);
 });
