@@ -74,8 +74,11 @@ npm install
 From the root of the project:
 ```bash
 cd backend
+npm install
 npm run dev
 ```
+> [!IMPORTANT]
+> For local development, ensure the frontend is configured to talk to your local backend (usually `http://localhost:3000`) by setting `VITE_BACKEND_URL` in your environment or `config.ts`.
 
 #### Start the Frontend
 Open a new terminal window and from the root of the project:
@@ -84,6 +87,29 @@ cd frontend
 npm run dev
 ```
 The frontend should now be running at `http://localhost:5173` (or the port specified by Vite).
+
+## Running with Docker
+
+You can also run the entire application using Docker Compose for a consistent environment.
+
+### 1. Configure Backend Environment
+Ensure you have a `.env` file in the `backend` directory with your `GEMINI_API_KEY`.
+
+### 2. Launch Services
+From the root directory, run:
+```bash
+docker-compose up --build -d
+```
+
+### 3. Access the Application
+- Frontend: `http://localhost:5173`
+- Backend: `http://localhost:3000`
+
+### 4. Stop Services
+To stop the running containers, use:
+```bash
+docker-compose down
+```
 
 ## Project Structure
 

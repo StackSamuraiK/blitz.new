@@ -40,7 +40,6 @@ CRITICAL: You MUST respond with file creation steps in this EXACT XML format:
 
 <boltArtifact id="project-files" title="Project Files">
   <boltAction type="file" filePath="src/App.tsx">
-    <boltActionText>
 import React from 'react';
 
 function App() {
@@ -52,11 +51,9 @@ function App() {
 }
 
 export default App;
-    </boltActionText>
   </boltAction>
   
   <boltAction type="file" filePath="package.json">
-    <boltActionText>
 {
   "name": "my-app",
   "version": "1.0.0",
@@ -65,14 +62,13 @@ export default App;
     "react-dom": "^18.2.0"
   }
 }
-    </boltActionText>
   </boltAction>
 </boltArtifact>
 
 RULES:
 1. ALWAYS wrap your entire response in <boltArtifact id="project-files" title="Project Files"> tags
 2. Each file MUST be in a <boltAction type="file" filePath="path/to/file"> tag
-3. File content MUST go inside <boltActionText> tags
+3. File content MUST go directly inside <boltAction> tags
 4. Use proper file paths like "src/App.tsx", "src/components/Button.tsx", "package.json", etc.
 5. Include ALL necessary files: components, package.json, configuration files, etc.
 6. DO NOT include explanations outside the XML tags

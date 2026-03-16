@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { StepsList } from '../components/StepsList';
 import { FileExplorer } from '../components/FileExplorer';
-import { TabView } from '../components/TabView';
 import { CodeEditor } from '../components/CodeEditor';
 import { PreviewFrame } from '../components/PreviewFrame';
 import { Step, FileItem, StepType } from '../types';
@@ -31,110 +30,64 @@ export function Builder() {
   const [steps, setSteps] = useState<Step[]>([]);
   const [files, setFiles] = useState<FileItem[]>([]);
 
-  // Update files when steps change
+  // Main effect to handle incoming steps: updates UI state structure
   useEffect(() => {
     let originalFiles = [...files];
-    let updateHappened = false;
     
-    steps.filter(({status}) => status === "pending").map(step => {
-      updateHappened = true;
-      if (step?.type === StepType.CreateFile) {
-        let parsedPath = step.path?.split("/") ?? [];
-        let currentFileStructure = [...originalFiles];
-        let finalAnswerRef = currentFileStructure;
-  
-        let currentFolder = ""
-        while(parsedPath.length) {
-          currentFolder =  `${currentFolder}/${parsedPath[0]}`;
-          let currentFolderName = parsedPath[0];
-          parsedPath = parsedPath.slice(1);
-  
-          if (!parsedPath.length) {
-            // final file
-            let file = currentFileStructure.find(x => x.path === currentFolder)
-            if (!file) {
-              currentFileStructure.push({
-                name: currentFolderName,
-                type: 'file',
-                path: currentFolder,
-                content: step.code
-              })
+    // Process only pending steps
+    const pendingSteps = steps.filter(({status}) => status === "pending");
+    
+    if (pendingSteps.length > 0) {
+      pendingSteps.forEach((step) => {
+        if (step?.type === StepType.CreateFile && step.path) {
+          let parsedPath = step.path.split("/") ?? [];
+          let currentFileStructure = [...originalFiles];
+          let finalAnswerRef = currentFileStructure;
+    
+          let currentFolder = ""
+          while(parsedPath.length) {
+            currentFolder = currentFolder ? `${currentFolder}/${parsedPath[0]}` : parsedPath[0];
+            let currentFolderName = parsedPath[0];
+            parsedPath = parsedPath.slice(1);
+    
+            if (!parsedPath.length) {
+              // final file
+              let file = currentFileStructure.find(x => x.path === currentFolder)
+              if (!file) {
+                currentFileStructure.push({
+                  name: currentFolderName,
+                  type: 'file',
+                  path: currentFolder,
+                  content: step.code
+                })
+              } else {
+                file.content = step.code;
+              }
             } else {
-              file.content = step.code;
+              // in a folder
+              let folder = currentFileStructure.find(x => x.path === currentFolder)
+              if (!folder) {
+                // create the folder
+                currentFileStructure.push({
+                  name: currentFolderName,
+                  type: 'folder',
+                  path: currentFolder,
+                  children: []
+                })
+              }
+              currentFileStructure = currentFileStructure.find(x => x.path === currentFolder)!.children!;
             }
-          } else {
-            // in a folder
-            let folder = currentFileStructure.find(x => x.path === currentFolder)
-            if (!folder) {
-              // create the folder
-              currentFileStructure.push({
-                name: currentFolderName,
-                type: 'folder',
-                path: currentFolder,
-                children: []
-              })
-            }
-  
-            currentFileStructure = currentFileStructure.find(x => x.path === currentFolder)!.children!;
           }
+          originalFiles = finalAnswerRef;
         }
-        originalFiles = finalAnswerRef;
-      }
-    })
+      });
 
-    if (updateHappened) {
-      console.log('Updating files from steps...');
-      setFiles(originalFiles)
-      setSteps(steps => steps.map((s: Step) => {
-        return {
-          ...s,
-          status: "completed"
-        }
-      }))
+      setFiles(originalFiles);
+      setSteps(prevSteps => prevSteps.map(s => 
+        pendingSteps.some(ps => ps.id === s.id) ? { ...s, status: "completed" } : s
+      ));
     }
-  }, [steps, files]);
-
-  // Mount files to WebContainer
-  useEffect(() => {
-    const createMountStructure = (files: FileItem[]): Record<string, any> => {
-      const mountStructure: Record<string, any> = {};
-  
-      const processFile = (file: FileItem, isRootFolder: boolean) => {  
-        if (file.type === 'folder') {
-          mountStructure[file.name] = {
-            directory: file.children ? 
-              Object.fromEntries(
-                file.children.map(child => [child.name, processFile(child, false)])
-              ) 
-              : {}
-          };
-        } else if (file.type === 'file') {
-          if (isRootFolder) {
-            mountStructure[file.name] = {
-              file: {
-                contents: file.content || ''
-              }
-            };
-          } else {
-            return {
-              file: {
-                contents: file.content || ''
-              }
-            };
-          }
-        }
-  
-        return mountStructure[file.name];
-      };
-  
-      files.forEach(file => processFile(file, true));
-      return mountStructure;
-    };
-  
-    const mountStructure = createMountStructure(files);
-    console.log('Mounting to WebContainer:', mountStructure);
-    webcontainer?.mount(mountStructure);
-  }, [files, webcontainer]);
+  }, [steps]);
 
   async function init() {
     if (!prompt || !prompt.trim()) {
@@ -148,16 +101,13 @@ export function Builder() {
       setLoading(true);
 
       console.log('=== INIT START ===');
-      console.log('BACKEND_URL:', BACKEND_URL);
-      console.log('Prompt:', prompt.trim());
       
       // Step 1: Get template
-      console.log('Step 1: Getting template...');
       const response = await axios.post(`${BACKEND_URL}/template`, {
         prompt: prompt.trim()
       });
 
-      console.log('Template response:', response.data);
+      console.log('Template response received');
       
       if (!response.data.prompts || !response.data.uiPrompts) {
         throw new Error('Invalid template response format');
@@ -168,11 +118,8 @@ export function Builder() {
       const {prompts, uiPrompts} = response.data;
 
       // Step 2: Parse initial UI prompts
-      console.log('Step 2: Parsing UI prompts...');
-      console.log('UI Prompt:', uiPrompts[0]);
       const initialSteps = parseXml(uiPrompts[0]);
-      console.log('Parsed initial steps:', initialSteps.length, 'steps');
-
+      
       setSteps(initialSteps.map((x: Step) => ({
         ...x,
         status: "pending"
@@ -588,13 +535,6 @@ export function Builder() {
                   </div>
                 ) : (
                   <div className="h-full relative">
-                    <div className="absolute inset-0 bg-gray-800/20 backdrop-blur-sm flex items-center justify-center">
-                      <div className="text-center mb-4">
-                        <Eye className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                        <p className="text-gray-400 text-lg mb-2">Live Preview</p>
-                        <p className="text-gray-600 text-sm">Your website will appear here</p>
-                      </div>
-                    </div>
                     {/* @ts-ignore */}
                     <PreviewFrame webContainer={webcontainer} files={files} />
                   </div>

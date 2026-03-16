@@ -1,1 +1,1 @@
-export const BACKEND_URL = "https://lumeai.onrender.com"
+export const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "https://lumeai.onrender.com"

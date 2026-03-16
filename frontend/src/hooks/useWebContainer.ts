@@ -7,7 +7,6 @@ export function useWebContainer() {
 
     useEffect(() => {
         async function main() {
-            // Only boot if not already initialized
             if (!isInitializedRef.current) {
                 const webcontainerInstance = await WebContainer.boot();
                 setWebcontainer(webcontainerInstance);
@@ -16,7 +15,7 @@ export function useWebContainer() {
         }
 
         main();
-    }, []); // Empty dependency array ensures it runs only once
+    }, []);
 
     return webcontainer;
 }
