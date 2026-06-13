@@ -157,7 +157,22 @@ export function Builder() {
       if (aiSteps.length === 0) {
         console.warn('⚠️ WARNING: parseXml returned 0 steps!');
         console.log('Raw AI response:', stepsResponse.data.response);
-        setError('AI generated a response but no files were created. The response format may be incorrect. Please try again with a different prompt.');
+        const raw = stepsResponse.data.response || '';
+        const hasArtifact = raw.includes('<boltArtifact');
+        const hasAction = raw.includes('<boltAction');
+        let detail: string;
+        if (!hasArtifact && !hasAction) {
+          detail =
+            'The AI response did not contain any <boltAction> tags. This usually means the prompt was refused or the model produced plain text instead of a project artifact.';
+        } else if (hasArtifact && !hasAction) {
+          detail = 'The AI response contained an artifact wrapper but no file actions inside it.';
+        } else {
+          detail = 'The AI response contained <boltAction> tags but none could be parsed. The format may be malformed.';
+        }
+        setError(
+          `AI generated a response but no files were created. ${detail} ` +
+            'Try a simpler or more specific prompt.'
+        );
         return;
       }
 
