@@ -1,0 +1,6 @@
+_bmad/
+_bmad-output/
+.claude/
+node_modules/
+dist/
+docs/
