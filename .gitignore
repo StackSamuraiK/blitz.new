@@ -4,3 +4,8 @@ _bmad-output/
 node_modules/
 dist/
 docs/
+landing-concepts/
+
+# Playwright
+playwright-report/
+test-results/
