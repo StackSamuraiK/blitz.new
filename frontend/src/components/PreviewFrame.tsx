@@ -5,6 +5,7 @@ import { FileItem } from '../types';
 interface PreviewFrameProps {
   files: FileItem[];
   webContainer: WebContainer;
+  onUrlReady?: (url: string) => void;
 }
 
 // npm install in a WebContainer can take several minutes on a cold cache —
@@ -168,7 +169,7 @@ function pickDevScript(packageJsonContent: string): {
   return { script: fallback ?? null, available };
 }
 
-export function PreviewFrame({ files, webContainer }: PreviewFrameProps) {
+export function PreviewFrame({ files, webContainer, onUrlReady }: PreviewFrameProps) {
   const [url, setUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [devErrors, setDevErrors] = useState<string[]>([]);
@@ -343,6 +344,7 @@ export function PreviewFrame({ files, webContainer }: PreviewFrameProps) {
           console.log(`Server ready on port ${port}: ${readyUrl}`);
           setUrl(readyUrl);
           setIsLoading(false);
+          onUrlReady?.(readyUrl);
         });
         serverReadyUnsubRef.current = unsubscribeServerReady;
 

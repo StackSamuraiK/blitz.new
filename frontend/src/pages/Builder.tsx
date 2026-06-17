@@ -10,6 +10,7 @@ import { BACKEND_URL } from '../config';
 import { parseXml } from '../steps';
 import { useWebContainer } from '../hooks/useWebContainer';
 import { Loader } from '../components/Loader';
+import { SkillsSelector, type Skill } from '../components/SkillsSelector';
 import { Wand2, Send, Sparkles, Code2, Eye, FolderOpen, Layers3, Bot, User, Zap, AlertCircle } from 'lucide-react';
 
 export function Builder() {
@@ -29,6 +30,13 @@ export function Builder() {
   
   const [steps, setSteps] = useState<Step[]>([]);
   const [files, setFiles] = useState<FileItem[]>([]);
+  const [previewReady, setPreviewReady] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const isPremium = true; // TODO: replace with actual auth tier check
+  const [availableSkills, setAvailableSkills] = useState<Skill[]>([]);
+  const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+  const [skillsLoading, setSkillsLoading] = useState(true);
+  const [skillsError, setSkillsError] = useState<string | null>(null);
 
   // Main effect to handle incoming steps: updates UI state structure
   useEffect(() => {
@@ -104,7 +112,9 @@ export function Builder() {
       
       // Step 1: Get template
       const response = await axios.post(`${BACKEND_URL}/template`, {
-        prompt: prompt.trim()
+        prompt: prompt.trim(),
+        tier: isPremium ? 'premium' : 'free',
+        skills: selectedSkills
       });
 
       console.log('Template response received');
@@ -135,7 +145,9 @@ export function Builder() {
       console.log('Sending', chatMessages.length, 'messages to /chat');
 
       const stepsResponse = await axios.post(`${BACKEND_URL}/chat`, {
-        messages: chatMessages
+        messages: chatMessages,
+        tier: isPremium ? 'premium' : 'free',
+        skills: selectedSkills
       });
 
       console.log('=== AI RESPONSE RECEIVED ===');
@@ -229,6 +241,35 @@ export function Builder() {
     init();
   }, []);
 
+  async function fetchSkills() {
+    try {
+      setSkillsLoading(true);
+      setSkillsError(null);
+      const response = await axios.get(`${BACKEND_URL}/skills`);
+      const skillsData: Skill[] = response.data.skills;
+      setAvailableSkills(skillsData);
+      const premiumSkillIds = skillsData.filter(s => s.premium).map(s => s.id);
+      setSelectedSkills(premiumSkillIds);
+    } catch (err) {
+      console.error('Failed to fetch skills:', err);
+      setSkillsError('Could not load design templates. AI will use default settings.');
+    } finally {
+      setSkillsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    fetchSkills();
+  }, []);
+
+  // Reset preview state when a new project is generated
+  useEffect(() => {
+    if (files.length > 0) {
+      setPreviewReady(false);
+      setPreviewUrl(null);
+    }
+  }, [files]);
+
   // Handle sending new messages
   async function handleSendMessage() {
     if (!userPrompt.trim()) return;
@@ -243,7 +284,9 @@ export function Builder() {
       console.log('Sending new message to AI...');
       
       const stepsResponse = await axios.post(`${BACKEND_URL}/chat`, {
-        messages: [...llmMessages, newMessage]
+        messages: [...llmMessages, newMessage],
+        tier: isPremium ? 'premium' : 'free',
+        skills: selectedSkills
       });
 
       console.log('New AI response received, length:', stepsResponse.data.response?.length);
@@ -410,6 +453,17 @@ export function Builder() {
               </div>
             </div>
 
+            {/* Skills Selector */}
+            <SkillsSelector
+              skills={availableSkills}
+              isPremium={true}
+              selectedSkills={selectedSkills}
+              onSkillsChange={setSelectedSkills}
+              loading={skillsLoading}
+              error={skillsError}
+              onRetry={fetchSkills}
+            />
+
             {/* Chat Input */}
             <div className="bg-gray-900/80 backdrop-blur-xl rounded-2xl border border-gray-800/50 shadow-2xl overflow-hidden">
               <div className="bg-gradient-to-r from-purple-600/10 to-pink-600/10 px-6 py-4 border-b border-gray-800/50">
@@ -534,26 +588,30 @@ export function Builder() {
               </div>
 
               <div className="h-[calc(100%-5rem)] bg-black/20">
-                {activeTab === 'code' ? (
-                  <div className="h-full relative">
-                    {!selectedFile ? (
-                      <div className="h-full flex items-center justify-center">
-                        <div className="text-center">
-                          <Code2 className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                          <p className="text-gray-400 text-lg mb-2">No file selected</p>
-                          <p className="text-gray-600 text-sm">Choose a file from the explorer to view its code</p>
-                        </div>
+                <div className={`h-full relative ${activeTab === 'code' ? 'block' : 'hidden'}`}>
+                  {!selectedFile ? (
+                    <div className="h-full flex items-center justify-center">
+                      <div className="text-center">
+                        <Code2 className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                        <p className="text-gray-400 text-lg mb-2">No file selected</p>
+                        <p className="text-gray-600 text-sm">Choose a file from the explorer to view its code</p>
                       </div>
-                    ) : (
-                      <CodeEditor file={selectedFile} />
-                    )}
-                  </div>
-                ) : (
-                  <div className="h-full relative">
-                    {/* @ts-ignore */}
-                    <PreviewFrame webContainer={webcontainer} files={files} />
-                  </div>
-                )}
+                    </div>
+                  ) : (
+                    <CodeEditor file={selectedFile} />
+                  )}
+                </div>
+                <div className={`h-full relative ${activeTab === 'preview' ? 'block' : 'hidden'}`}>
+                  {/* @ts-ignore */}
+                  <PreviewFrame
+                    webContainer={webcontainer}
+                    files={files}
+                    onUrlReady={(url) => {
+                      setPreviewUrl(url);
+                      setPreviewReady(true);
+                    }}
+                  />
+                </div>
               </div>
             </div>
           </div>
