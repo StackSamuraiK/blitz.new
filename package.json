@@ -1,1 +1,19 @@
-{}
+{
+  "scripts": {
+    "test": "concurrently -n frontend,backend -c blue,green \"npm test --prefix frontend\" \"npm test --prefix backend\"",
+    "test:frontend": "npm test --prefix frontend",
+    "test:backend": "npm test --prefix backend",
+    "test:coverage": "concurrently -n frontend,backend \"npm run test:coverage --prefix frontend\" \"npm run test:coverage --prefix backend\"",
+    "ci": "npm ci && npm test",
+    "test:e2e": "bash scripts/playwright-ci.sh",
+    "test:e2e:dev": "playwright test",
+    "test:e2e:debug": "PWDEBUG=1 npx playwright test",
+    "test:e2e:report": "npx playwright show-report",
+    "test:e2e:ui": "npx playwright test --ui"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "concurrently": "^9.1.0",
+    "wait-on": "^9.0.10"
+  }
+}

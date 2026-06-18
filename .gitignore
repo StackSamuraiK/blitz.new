@@ -4,3 +4,20 @@ _bmad-output/
 node_modules/
 dist/
 docs/
+landing-concepts/
+
+# Playwright
+playwright-report/
+test-results/
+
+# Coverage
+coverage/
+backend/coverage/
+
+# TypeScript incremental build info
+*.tsbuildinfo
+
+# Environment files
+.env
+.env.local
+.env.*.local
